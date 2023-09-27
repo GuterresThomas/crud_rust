@@ -75,8 +75,26 @@ async fn main() -> Result<(), Error> {
             }
         });
 
+        let delete_item = warp::delete()
+        .and(warp::path!("items" / i32))
+        .and(db.clone())
+        .and_then(|item_id: i32, client: Arc<Client>| async move {
+            let delete_query = format!("DELETE FROM items WHERE id = {}", item_id);
+            match client.execute(&delete_query, &[]).await {
+                Ok(rows) if rows == 1 => {
+                    // A exclusão foi bem-sucedida, retornar uma resposta de sucesso
+                    Ok(warp::reply::html("Item excluído com sucesso"))
+                }
+                _ => {
+                    // Não foi possível excluir o item (talvez o ID não exista)
+                    let error_message = format!("Failed to delete item with ID: {}", item_id);
+                    Err(custom(CustomError(error_message)))
+                }
+            }
+        });
+
     // Combinar todas as rotas
-    let routes = create_item.or(get_items);
+    let routes = create_item.or(get_items).or(delete_item);
 
     // Iniciar o servidor Warp
     warp::serve(routes)
