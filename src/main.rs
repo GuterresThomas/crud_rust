@@ -1,4 +1,4 @@
-use warp::Filter;
+use warp::{Filter, filters::query};
 use tokio_postgres::{NoTls, Error, Client};
 use std::sync::Arc;
 use warp::reject::custom;
@@ -52,16 +52,27 @@ async fn main() -> Result<(), Error> {
     let get_items = warp::get()
         .and(warp::path("items"))
         .and(db.clone()) // Passar a conexão do banco de dados para o manipulador
-        .map(|client: Arc<Client>| {
-            // Implemente a lógica para buscar itens no banco de dados
-            // e retorne uma resposta adequada
-            // Aqui você pode executar uma consulta SELECT no banco de dados
-            // e retornar os resultados como uma resposta JSON
-            let items = vec![Item {
-                id: 1,
-                name: "Item 1".to_string(),
-            }];
-            warp::reply::json(&items)
+        .and_then(|client: Arc<Client>| async move {
+            let query = "SELECT id, name FROM items"; //consulta sql
+
+            match client.query(query, &[]).await {
+                Ok(rows) => {
+                    //mapear os items
+                    let items: Vec<Item> = rows
+                    .into_iter()
+                    .map(|row| Item {
+                        id: row.get("id"),
+                        name: row.get("name"),
+                    })
+                    .collect();
+                
+                Ok(warp::reply::json(&items))
+                }
+                Err(err) => {
+                    let error_message = format!("Failed to fetch items: {}", err);
+                    Err(custom(CustomError(error_message)))
+                }
+            }
         });
 
     // Combinar todas as rotas
